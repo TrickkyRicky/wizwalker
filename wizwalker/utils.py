@@ -1,6 +1,7 @@
 import asyncio
 import ctypes
 import ctypes.wintypes
+import functools
 import io
 import math
 import struct
@@ -20,6 +21,19 @@ from wizwalker.constants import Keycode, kernel32, user32, gdi32, WM_KEYDOWN, WM
 
 
 DEFAULT_INSTALL = "C:/ProgramData/KingsIsle Entertainment/Wizard101"
+
+
+@functools.lru_cache(maxsize=None)
+def is_wine() -> bool:
+    """
+    If we're running under Wine (Mac client)
+    """
+    try:
+        ctypes.windll.ntdll.wine_get_version
+    except AttributeError:
+        return False
+
+    return True
 
 
 async def async_sorted(iterable, /, *, key=None, reverse=False):

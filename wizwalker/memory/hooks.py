@@ -9,6 +9,7 @@ import warnings
 from loguru import logger
 
 from .memory_reader import MemoryReader
+from wizwalker import utils
 from wizwalker.constants import kernel32
 
 
@@ -231,6 +232,19 @@ class PlayerStatHook(SimpleHook):
     exports = [("stat_addr", 8)]
     noops = 2
 
+    # hooked the function entry becasue the rcx has junk after the call in wine
+    wine_pattern = (
+        rb"\x40\x53\x48\x83\xEC\x20\x8B\x99\xE4\x00\x00\x00\x03\x59\x54"
+        rb"\xF3\x0F\x10\x0D....\x66\x0F\x6E\xC3\x0F\x5B\xC0\xF3\x0F\x59\x81\x3C\x03\x00\x00\xE8"
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if utils.is_wine():
+            self.pattern = self.wine_pattern
+            self.instruction_length = 6
+            self.noops = 1
+
     async def bytecode_generator(self, packed_exports):
         # fmt: off
         bytecode = (
@@ -238,10 +252,17 @@ class PlayerStatHook(SimpleHook):
                 b"\x48\x89\xC8"  # mov rax, rcx
                 b"\x48\xA3" + packed_exports[0][1] +  # mov qword ptr [stat_export], rax
                 b"\x58"  # pop rax
-                # original code
+        )
+        if utils.is_wine():
+            bytecode += (
+                b"\x40\x53"  # push rbx
+                b"\x48\x83\xEC\x20"  # sub rsp, 20h
+            )
+        else:
+            bytecode += (
                 b"\x2B\xD8"  # sub ebx, eax
                 b"\xB8\x00\x00\x00\x00"  # mov eax, 0
-        )
+            )
         # fmt: on
         return bytecode
 

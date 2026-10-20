@@ -563,7 +563,9 @@ class Client:
         await self._teleport_helper.write_should_update(True)
 
         for je in jes:
-            await self.hook_handler.write_bytes(je, b"\x90" * 6)
+            # skip the write when there is no opperation needed
+            if await self.hook_handler.read_bytes(je, 6) != b"\x90" * 6:
+                await self.hook_handler.write_bytes(je, b"\x90" * 6)
 
         if purge_on_after_unuser_fixer:
             try:

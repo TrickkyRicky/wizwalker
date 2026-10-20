@@ -1,4 +1,6 @@
 import asyncio
+import contextlib
+import ctypes
 import functools
 import regex
 import struct
@@ -20,6 +22,22 @@ from wizwalker import (
     Primitive,
     utils,
 )
+
+
+@contextlib.contextmanager
+def _frozen_on_wine(handle):
+    # Wine turns the page no-access for the length of a remote write, a game thread touching it then faults
+    if not utils.is_wine():
+        yield
+        return
+
+    ntdll = ctypes.windll.ntdll
+    suspended = ntdll.NtSuspendProcess(ctypes.c_void_p(handle)) == 0
+    try:
+        yield
+    finally:
+        if suspended:
+            ntdll.NtResumeProcess(ctypes.c_void_p(handle))
 
 
 class MemoryReader:
@@ -296,14 +314,15 @@ class MemoryReader:
         """
         size = len(value)
 
-        try:
-            self.process.write_bytes(address, value, size)
-        except pymem.exception.MemoryWriteError:
-            # see read_bytes
-            if not self.is_running():
-                raise ClientClosedError()
-            else:
-                raise MemoryWriteError(address)
+        with _frozen_on_wine(self.process.process_handle):
+            try:
+                self.process.write_bytes(address, value, size)
+            except pymem.exception.MemoryWriteError:
+                # see read_bytes
+                if not self.is_running():
+                    raise ClientClosedError()
+                else:
+                    raise MemoryWriteError(address)
 
     async def read_typed(self, address: int, data_type: Primitive) -> Any:
         """
