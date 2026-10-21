@@ -7,7 +7,8 @@ import pymem
 import pymem.exception
 from loguru import logger
 
-from wizwalker import HookAlreadyActivated, HookNotActive, HookNotReady
+from wizwalker import HookAlreadyActivated, HookNotActive, HookNotReady, utils
+from .clean_slate import restore_original_code
 from .hooks import (
     ChatHook,
     ChatSendHook,
@@ -81,6 +82,10 @@ class HookHandler(MemoryReader):
     # noinspection PyTypeChecker
     async def _prepare_autobot(self):
         if self._autobot_address is None:
+            if utils.is_wine():
+                # hooks from an earlier session would hide the cave and can't be unhooked anymore
+                await restore_original_code(self)
+
             await self._get_autobot_address()
 
             # we only need to write back the pattern
